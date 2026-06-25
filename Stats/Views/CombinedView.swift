@@ -285,3 +285,133 @@ private class Popup: NSStackView, Popup_p {
         }
     }
 }
+
+// MARK: - Vue "Résumé" (ajout personnel)
+//
+// Un seul bouton dédié dans la barre de menus qui ouvre un carré résumant
+// le CPU, le GPU et la RAM (jauge + chiffres). On réutilise les "portals"
+// déjà fournis par chaque module : aucun code de lecture des capteurs n'est
+// dupliqué. Tout est volontairement isolé ici (+1 ligne dans AppDelegate)
+// pour limiter les conflits lors des mises à jour d'exelban/stats.
+//
+// Pour désactiver la vue : retirer la propriété `resumeView` dans AppDelegate.
+
+internal class ResumeView: NSObject {
+    private var menuBarItem: NSStatusItem? = nil
+    private var popup: PopupWindow? = nil
+
+    override init() {
+        super.init()
+
+        self.popup = PopupWindow(title: localizedString("Resume"), module: .combined, view: ResumePopup()) { _ in }
+
+        // Le bouton est créé au prochain tour de la run loop, une fois que
+        // l'application a fini de se lancer et que la barre de menus existe.
+        DispatchQueue.main.async { [weak self] in
+            self?.enable()
+        }
+    }
+
+    public func enable() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.autosaveName = "StatsResume"
+        item.button?.image = iconFromSymbol(name: "speedometer", scale: .large)
+        item.button?.toolTip = localizedString("Resume")
+        item.button?.target = self
+        item.button?.action = #selector(self.togglePopup)
+        item.button?.sendAction(on: [.leftMouseDown, .rightMouseDown])
+        self.menuBarItem = item
+    }
+
+    public func disable() {
+        if let item = self.menuBarItem {
+            NSStatusBar.system.removeStatusItem(item)
+        }
+        self.menuBarItem = nil
+    }
+
+    @objc private func togglePopup(_ sender: NSButton) {
+        guard let popup = self.popup, let item = self.menuBarItem, let window = item.button?.window else { return }
+        let openedWindows = NSApplication.shared.windows.filter { $0 is NSPanel }
+        openedWindows.forEach { $0.setIsVisible(false) }
+
+        if popup.occlusionState.rawValue == 8192 {
+            NSApplication.shared.activate(ignoringOtherApps: true)
+
+            popup.contentView?.invalidateIntrinsicContentSize()
+
+            let windowCenter = popup.contentView!.intrinsicContentSize.width / 2
+            var x = window.frame.origin.x - windowCenter + window.frame.width/2
+            let y = window.frame.origin.y - popup.contentView!.intrinsicContentSize.height - 3
+
+            let maxWidth = NSScreen.screens.map { $0.frame.width }.reduce(0, +)
+            if x + popup.contentView!.intrinsicContentSize.width > maxWidth {
+                x = maxWidth - popup.contentView!.intrinsicContentSize.width - 3
+            }
+
+            popup.setFrameOrigin(NSPoint(x: x, y: y))
+            popup.setIsVisible(true)
+        } else {
+            popup.setIsVisible(false)
+        }
+    }
+}
+
+private class ResumePopup: NSStackView, Popup_p {
+    fileprivate var keyboardShortcut: [UInt16] = []
+    fileprivate var sizeCallback: ((NSSize) -> Void)? = nil
+
+    // Modules résumés, dans l'ordre d'affichage.
+    private let moduleNames: [String] = [
+        ModuleType.CPU.stringValue,
+        ModuleType.GPU.stringValue,
+        ModuleType.RAM.stringValue
+    ]
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: Constants.Popup.width, height: 0))
+
+        self.orientation = .vertical
+        self.distribution = .fill
+        self.alignment = .width
+        self.spacing = Constants.Popup.spacing
+
+        self.reinit()
+
+        NotificationCenter.default.addObserver(self, selector: #selector(reinit), name: .toggleModule, object: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .toggleModule, object: nil)
+    }
+
+    fileprivate func settings() -> NSView? { return nil }
+    fileprivate func appear() { self.reinit() }
+    fileprivate func disappear() {}
+    fileprivate func setKeyboardShortcut(_ binding: [UInt16]) { self.keyboardShortcut = binding }
+
+    @objc private func reinit() {
+        self.subviews.forEach({ $0.removeFromSuperview() })
+
+        // On ne garde que CPU/GPU/RAM, activés et disposant d'un portal.
+        let availableModules: [Module] = self.moduleNames.compactMap { name in
+            modules.first(where: { $0.name == name && $0.enabled && $0.portal != nil })
+        }
+        availableModules.forEach { (m: Module) in
+            if let p = m.portal {
+                self.addArrangedSubview(p)
+            }
+        }
+
+        let count = availableModules.count
+        let h = CGFloat(count) * Constants.Popup.portalHeight + (CGFloat(max(count - 1, 0)) * Constants.Popup.spacing)
+        if h > 0 {
+            self.setFrameSize(NSSize(width: self.frame.width, height: h))
+            self.sizeCallback?(self.frame.size)
+        }
+    }
+}

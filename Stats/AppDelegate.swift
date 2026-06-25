@@ -45,7 +45,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     
     internal var menuBarItem: NSStatusItem? = nil
     internal var combinedView: CombinedView = CombinedView()
-    
+    internal var resumeView: ResumeView = ResumeView() // Ajout perso : bouton "Résumé" CPU/GPU/RAM
+
     internal let updateActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.updateCheck")
     internal let supportActivity = NSBackgroundActivityScheduler(identifier: "eu.exelban.Stats.support")
     
