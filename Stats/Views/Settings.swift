@@ -28,6 +28,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     
     private var dashboard: NSView = Dashboard()
     private var settings: ApplicationSettings = ApplicationSettings()
+    private var resumeSettings: ResumeSettingsView = ResumeSettingsView() // ajout perso : réglages des vues "Résumé"
     
     private var toggleButton: NSControl? = nil
     private var activeModuleName: String? = nil
@@ -95,6 +96,7 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(externalModuleToggle), name: .toggleModule, object: nil)
         
         self.sidebarView.setModules(modules)
+        self.sidebarView.addExtraMenu(icon: iconFromSymbol(name: "speedometer", scale: .large), title: "Résumé") // ajout perso
         self.sidebarView.openMenu("Dashboard")
     }
     
@@ -202,6 +204,12 @@ class SettingsWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
             } else if title == "Settings" {
                 self.settings.viewWillAppear()
                 view = self.settings
+                self.toggleButton?.isHidden = true
+                self.settingsPreviewButton?.isHidden = true
+                NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
+            } else if title == "Résumé" { // ajout perso : panneau qui gère les 2 vues "Résumé"
+                self.resumeSettings.viewWillAppear()
+                view = self.resumeSettings
                 self.toggleButton?.isHidden = true
                 self.settingsPreviewButton?.isHidden = true
                 NotificationCenter.default.post(name: .openWindow, object: nil, userInfo: ["state": false])
@@ -380,6 +388,11 @@ private class SidebarView: NSStackView {
             let menu: NSView = MenuItem(icon: m.config.icon, title: m.config.name)
             self.scrollView.stackView.insertArrangedSubview(menu, at: 2)
         }
+    }
+
+    // Ajout perso : insère une entrée supplémentaire juste sous "Dashboard".
+    fileprivate func addExtraMenu(icon: NSImage?, title: String) {
+        self.scrollView.stackView.insertArrangedSubview(MenuItem(icon: icon, title: title), at: 1)
     }
     
     private func makeButton(title: String, image: NSImage, action: Selector) -> NSButton {

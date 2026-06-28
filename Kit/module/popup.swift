@@ -269,6 +269,7 @@ internal class PopupView: NSView {
             width: size.width - (Constants.Popup.margins*2) + (isScrollVisible ? 20 : 0),
             height: size.height - Constants.Popup.headerHeight - (Constants.Popup.margins*2)
         ))
+        self.header.setFrameSize(NSSize(width: size.width, height: Constants.Popup.headerHeight))
         self.header.setFrameOrigin(NSPoint(x: 0, y: size.height - Constants.Popup.headerHeight))
         
         if let view = view {
@@ -333,8 +334,9 @@ internal class PopupView: NSView {
             width: windowSize.width - (Constants.Popup.margins*2) + (isScrollVisible ? 20 : 0),
             height: windowSize.height - Constants.Popup.headerHeight - (Constants.Popup.margins*2)
         ))
+        self.header.setFrameSize(NSSize(width: windowSize.width, height: Constants.Popup.headerHeight))
         self.header.setFrameOrigin(NSPoint(
-            x: self.header.frame.origin.x,
+            x: 0,
             y: self.body.frame.height + (Constants.Popup.margins*2)
         ))
         
@@ -351,12 +353,17 @@ internal class PopupView: NSView {
 internal class HeaderView: NSStackView {
     private var titleView: NSTextField? = nil
     private var activityButton: NSButton?
-    
+
     private var title: String = ""
     private var isCloseAction: Bool = false
     private let activityMonitor: URL?
     private let calendar: URL?
     private var module: ModuleType
+
+    // Largeur des boutons latéraux : permet de recentrer le titre quand le header
+    // est redimensionné (popups larges comme le "Tableau de bord" perso).
+    private var titleWidthConstraint: NSLayoutConstraint?
+    private var sideButtonsWidth: CGFloat = 0
     
     init(frame: NSRect, module: ModuleType) {
         self.module = module
@@ -412,12 +419,18 @@ internal class HeaderView: NSStackView {
         self.addArrangedSubview(activity)
         self.addArrangedSubview(title)
         self.addArrangedSubview(settings)
-        
-        NSLayoutConstraint.activate([
-            title.widthAnchor.constraint(
-                equalToConstant: self.frame.width - activity.intrinsicContentSize.width - settings.intrinsicContentSize.width
-            )
-        ])
+
+        self.sideButtonsWidth = activity.intrinsicContentSize.width + settings.intrinsicContentSize.width
+        let titleWidth = title.widthAnchor.constraint(equalToConstant: self.frame.width - self.sideButtonsWidth)
+        self.titleWidthConstraint = titleWidth
+        titleWidth.isActive = true
+    }
+
+    // Quand le header est redimensionné (popup large), le titre s'élargit pour
+    // rester centré et les deux boutons restent sur les côtés.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        self.titleWidthConstraint?.constant = max(0, newSize.width - self.sideButtonsWidth)
     }
     
     required init?(coder: NSCoder) {
